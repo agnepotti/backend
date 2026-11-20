@@ -16,10 +16,6 @@ Acá viven las 3 dependencias reutilizables que protegen TODOS los endpoints:
   3. require_scope     → AUTORIZACIÓN por scope del TOKEN. 403 si el scope
                          del token no alcanza para la operación.
       ─────────────────────────────────────────────────────────────────────
-      🔴 ESTADO ACTUAL: VULNERABLE. Lee el payload pero no valida nada.
-      💡 TU TRABAJO: leer `request.state.token_payload` (que dejó
-         get_current_user) y responder 403 si el scope pedido NO está
-         dentro del scope del token.
       🧠 LECCIÓN (Pilar 3): el ROL es del usuario (lo relees de storage en
          cada request → el cambio de rol es inmediato). El SCOPE es del
          TOKEN (vive en el claim `scope`, lo fijó el login). Por eso
@@ -111,28 +107,17 @@ def require_scope(required: str) -> Callable:
           lectura) NO puede crear documentos aunque sea admin. El scope se
           lee del TOKEN (request.state.token_payload), no del usuario.
 
-    🔴 ESTADO ACTUAL (VULNERABLE): no valida nada.
-
-    ✅ COMPLETALO:
-        1. Leé el scope del token:
-               payload = request.state.token_payload
-               token_scope = payload.get("scope", "")
-        2. Si `required` NO está dentro de token_scope → 403 con un detail
-           claro ("El token no tiene el scope necesario para esta operación").
-        3. Si querés soportar varios scopes separados por espacio
-           ("read write"), pensá en dividir con .split().
-        4. Devolvé `current_user`.
     """
     def checker(
         request: Request,
         current_user: Annotated[User, Depends(get_current_user)],
     ) -> User:
-        # ─────────────────────────────────────────────────────────────
-        # 🔓 TU CÓDIGO ACÁ:
-        #    payload = request.state.token_payload
-        #    token_scope = payload.get("scope", "")
-        #    if required not in token_scope.split():
-        #        raise HTTPException(status_code=403, detail=...)
-        # ─────────────────────────────────────────────────────────────
+        payload = request.state.token_payload
+        token_scope = payload.get("scope", "")
+        if not isinstance(token_scope, str) or required not in token_scope.split():
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="El token no tiene el scope necesario para esta operación",
+            )
         return current_user
     return checker
