@@ -10,11 +10,7 @@ Acá viven las 3 dependencias reutilizables que protegen TODOS los endpoints:
 
   2. require_role      → AUTORIZACIÓN por rol. 403 si el rol no alcanza.
       ─────────────────────────────────────────────────────────────────────
-      🔴 ESTADO ACTUAL: VULNERABLE. Devuelve al usuario sin verificar nada:
-      cualquier autenticado "pasa" como si tuviera el rol pedido.
-      💡 TU TRABAJO: comparar `current_user.role` contra `required` y
-         responder 403 si no coinciden. El 403 (Forbidden) es el código
-         de la AUTORIZACIÓN: autenticado pero sin permiso.
+      Usa el rol que get_current_user carga desde storage en cada request.
       ─────────────────────────────────────────────────────────────────────
 
   3. require_scope     → AUTORIZACIÓN por scope del TOKEN. 403 si el scope
@@ -88,25 +84,15 @@ def require_role(required: Role) -> Callable:
 
     Uso en los endpoints:
         current_user: User = Depends(require_role(Role.ADMIN))
-
-    🔴 ESTADO ACTUAL (VULNERABLE): devuelve al usuario sin verificar el rol.
-    Si corrés el script de verificación ahora, los checks de "gestionar
-    usuarios → 403" van a fallar porque CUALQUIER autenticado pasa acá.
-
-    ✅ COMPLETALO:
-        1. Compará `current_user.role` con `required`. ¿Coinciden?
-           NO → lanzá HTTPException 403 con un detail claro
-                ("No tenés el rol necesario para esta operación").
-           SÍ → devolvé `current_user` (los endpoints lo usan).
     """
     def checker(
         current_user: Annotated[User, Depends(get_current_user)],
     ) -> User:
-        # ─────────────────────────────────────────────────────────────
-        # 🔓 TU CÓDIGO ACÁ (reemplaza/envolvé el return de abajo):
-        #    if current_user.role != required:
-        #        raise HTTPException(status_code=403, detail=...)
-        # ─────────────────────────────────────────────────────────────
+        if current_user.role != required:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="No tenés el rol necesario para esta operación",
+            )
         return current_user
     return checker
 
