@@ -82,7 +82,7 @@ def get_document(
 
     Reglas que tenés que implementar en orden:
         1. 404 si el documento no existe.
-        2. 🔓 TENANCY: si doc.tenant_id != current_user.tenant_id → 403.
+        2. TENANCY: si doc.tenant_id != current_user.tenant_id → 403.
            (documento de OTRA empresa: 403 para TODOS, incluso admin).
         3. Si visibility == "public" → devolvelo (todos lo ven).
         4. 🔓 OBJECT-LEVEL: si es PRIVADO → ¿sos el dueño
@@ -92,7 +92,12 @@ def get_document(
     doc = storage.get_document(doc_id)
     if doc is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Documento no encontrado")
-    # 🔓 TU CÓDIGO ACÁ (tenancy + object-level según las reglas de arriba).
+    if doc.tenant_id != current_user.tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No podés ver documentos de otra empresa",
+        )
+    # 🔓 TODO: object-level para documentos privados.
     return doc
 
 
@@ -106,7 +111,11 @@ def update_document(
     doc = storage.get_document(doc_id)
     if doc is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Documento no encontrado")
-    # 🔓 TODO: tenancy (403 si es de otra empresa).
+    if doc.tenant_id != current_user.tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No podés editar documentos de otra empresa",
+        )
     # 🔓 TODO: object-level — ¿dueño o admin? si NO → 403 ("No podés editar este documento").
     return storage.update_document(doc_id, body)
 
@@ -120,7 +129,11 @@ def delete_document(
     doc = storage.get_document(doc_id)
     if doc is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Documento no encontrado")
-    # 🔓 TODO: tenancy — un admin de Acme no borra docs de Globex (403).
+    if doc.tenant_id != current_user.tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No podés borrar documentos de otra empresa",
+        )
     deleted = storage.delete_document(doc_id)
     return deleted
 
@@ -139,6 +152,10 @@ def publish_document(
     doc = storage.get_document(doc_id)
     if doc is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Documento no encontrado")
-    # 🔓 TODO: tenancy (403 si es de otra empresa).
+    if doc.tenant_id != current_user.tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No podés publicar documentos de otra empresa",
+        )
     # 🔓 TODO: object-level — ¿dueño o admin? si NO → 403 ("No podés publicar este documento").
     return storage.set_document_published(doc_id, True)
