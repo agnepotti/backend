@@ -2,8 +2,6 @@
 Controller de DOCUMENTOS — el recurso protegido (object-level + scopes).
 
 ┌─────────────────────────────────────────────────────────────────────────┐
-│ 🔓 COMPLETÁS VOS: ESTE es el archivo más importante de la entrega.     │
-│                                                                         │
 │   POST   /api/documents            → crear     (scope "write")          │
 │   GET    /api/documents            → listar    (públicos + los tuyos)   │
 │   GET    /api/documents/{id}       → ver       (dueño / admin / público)│
@@ -11,12 +9,7 @@ Controller de DOCUMENTOS — el recurso protegido (object-level + scopes).
 │   DELETE /api/documents/{id}       → borrar    (admin, "write")         │
 │   POST   /api/documents/{id}/publish → publicar (dueño o admin, "write")│
 │                                                                         │
-│ 🔴 El estado actual es el ATACANTE A01 del OWASP: **IDOR**.             │
-│    Cualquier autenticado que conozca el id lee/edita/borra TODO.        │
-│    Probalo: logueate como viewer@acme.com y pedí GET /api/documents/5   │
-│    (el plan secreto de Globex) → responde 200. LUSTRADA.                │
-│                                                                         │
-│ ✅ TU TRABAJO, en cada endpoint:                                        │
+│ Controles de autorización:                                             │
 │    1. SCOPE: los que modifican datos exigen Depends(require_scope("write"))│
 │    2. TENANCY: si document.tenant_id != current_user.tenant_id → 403   │
 │       (aplica SIEMPRE, incluso para documentos públicos)               │
@@ -78,14 +71,14 @@ def get_document(
     doc_id: int,
     current_user: User = Depends(get_current_user),
 ):
-    """Ve un documento por id. 🔴 ACÁ VIVE EL IDOR: el caso más violado.
+    """Ve un documento por ID según su empresa, visibilidad y dueño.
 
-    Reglas que tenés que implementar en orden:
+    Reglas que se aplican en orden:
         1. 404 si el documento no existe.
         2. TENANCY: si doc.tenant_id != current_user.tenant_id → 403.
            (documento de OTRA empresa: 403 para TODOS, incluso admin).
         3. Si visibility == "public" → devolvelo (todos lo ven).
-        4. 🔓 OBJECT-LEVEL: si es PRIVADO → ¿sos el dueño
+        4. OBJECT-LEVEL: si es PRIVADO → ¿sos el dueño
            (doc.owner_id == current_user.id) o admin de la empresa?
            NO → 403. SÍ → devolvelo.
     """
@@ -97,7 +90,15 @@ def get_document(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="No podés ver documentos de otra empresa",
         )
-    # 🔓 TODO: object-level para documentos privados.
+    if (
+        doc.visibility == "private"
+        and doc.owner_id != current_user.id
+        and current_user.role != Role.ADMIN
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No podés ver este documento",
+        )
     return doc
 
 
@@ -116,14 +117,22 @@ def update_document(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="No podés editar documentos de otra empresa",
         )
-    # 🔓 TODO: object-level — ¿dueño o admin? si NO → 403 ("No podés editar este documento").
+    if doc.owner_id != current_user.id and current_user.role != Role.ADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No podés editar este documento",
+        )
     return storage.update_document(doc_id, body)
 
 
-@router.delete("/documents/{doc_id}", response_model=DocumentRead)
+@router.delete(
+    "/documents/{doc_id}",
+    response_model=DocumentRead,
+    dependencies=[Depends(require_role(Role.ADMIN))],
+)
 def delete_document(
     doc_id: int,
-    current_user: User = Depends(require_scope("write")),  # 🔓 TODO: exigir también el rol admin.
+    current_user: User = Depends(require_scope("write")),
 ):
     """Borra un documento: SOLO admin (la matriz exige 403 para editor/viewer)."""
     doc = storage.get_document(doc_id)
@@ -146,8 +155,7 @@ def publish_document(
     """Publica un documento: el DUEÑO publica lo suyo; el admin, cualquiera.
 
     La matriz exige: admin ✅ · editor ✅ (lo suyo) · viewer ❌403.
-    El viewer ya queda afuera por su scope "read" — vos solo tenés que
-    aplicar dueño-o-admin + tenancy.
+    La publicación exige scope "write", misma empresa y dueño o admin.
     """
     doc = storage.get_document(doc_id)
     if doc is None:
@@ -157,5 +165,9 @@ def publish_document(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="No podés publicar documentos de otra empresa",
         )
-    # 🔓 TODO: object-level — ¿dueño o admin? si NO → 403 ("No podés publicar este documento").
+    if doc.owner_id != current_user.id and current_user.role != Role.ADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No podés publicar este documento",
+        )
     return storage.set_document_published(doc_id, True)
