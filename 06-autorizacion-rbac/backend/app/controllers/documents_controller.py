@@ -48,7 +48,7 @@ router = APIRouter(prefix="/api", tags=["3 · Documentos"])
 )
 def create_document(
     body: DocumentCreate,
-    current_user: User = Depends(get_current_user),  # 🔓 TODO: Depends(require_scope("write"))
+    current_user: User = Depends(require_scope("write")),
 ):
     """Crea un documento: draft privado a nombre tuyo, en TU empresa.
 
